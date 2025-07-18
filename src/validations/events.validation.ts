@@ -2,11 +2,15 @@ import { z } from 'zod';
 
 export const eventSchema = z.object({
   type: z.enum(['pageview', 'click', 'session_end']),
-  page: z.string(),
+  page: z.string().regex(/^\/[a-z0-9-_\/]*$/, { message: 'Invalid page path' }),
   sessionId: z.string(),
-  timestamp: z.string().refine(val => !isNaN(Date.parse(val)), {
-    message: "Invalid timestamp format",
-  }),
+  timestamp: z.coerce.date(),
   country: z.string(),
-  metadata: z.record(z.any()).optional(),
+   metadata: z
+    .object({
+      browser: z.string().optional(),
+      device: z.string().optional(),
+    })
+    .passthrough()
+    .optional(),
 });

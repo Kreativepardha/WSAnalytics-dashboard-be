@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Visitor Analytics Dashboard</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    .connected { color: green; }
+    .disconnected { color: red; }
+    pre { background: #f4f4f4; padding: 10px; }
+  </style>
+</head>
+<body>
+  <h1>📊 Visitor Analytics Dashboard</h1>
+  <p>Status: <span id="ws-status" class="disconnected">Disconnected</span></p>
+  <p>Connected Dashboards: <span id="dashboards">0</span></p>
+  <p>Active Visitors: <span id="active">0</span></p>
+  <p>Total Today: <span id="today">0</span></p>
+
+  <h2>📈 Live Events</h2>
+  <div id="events"></div>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script>
+    const statusEl = document.getElementById('ws-status');
+    const dashboardsEl = document.getElementById('dashboards');
+    const activeEl = document.getElementById('active');
+    const todayEl = document.getElementById('today');
+    const eventsEl = document.getElementById('events');
+
+    const socket = io('http://localhost:3000');
+
+    function updateStatus(connected) {
+      statusEl.textContent = connected ? 'Connected' : 'Disconnected';
+      statusEl.className = connected ? 'connected' : 'disconnected';
+    }
+
+    socket.on('connect', () => updateStatus(true));
+    socket.on('disconnect', () => updateStatus(false));
+
+    socket.on('user_connected', (data) => {
+      dashboardsEl.textContent = data.data.totalDashboards;
+    });
+
+    socket.on('user_disconnected', (data) => {
+      dashboardsEl.textContent = data.data.totalDashboards;
+    });
+
+    socket.on('visitor_update', (payload) => {
+      activeEl.textContent = payload.data.stats.totalActive;
+      todayEl.textContent = payload.data.stats.totalToday;
+
+      const div = document.createElement('div');
+      div.innerHTML = `<pre>${JSON.stringify(payload.data.event, null, 2)}</pre>`;
+      eventsEl.prepend(div);
+    });
+
+    socket.on('session_activity', (payload) => {
+      const div = document.createElement('div');
+      div.innerHTML = `<strong>Session ${payload.data.sessionId}:</strong> ${payload.data.journey.join(' → ')} (${payload.data.duration}s)`;
+      eventsEl.prepend(div);
+    });
+  </script>
+</body>
+</html>

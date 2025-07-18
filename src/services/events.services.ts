@@ -1,31 +1,33 @@
 import { prisma } from '../config/db';
 import { logger } from '../utils/logger';
 import { eventSchema } from '../validations/events.validation';
+import { WebSocketServerInstance } from '../websockets';
 
-// In-memory session tracker
-const activeSessions = new Map<string, {
-  journey: string[],
-  startedAt: Date,
+
+
+export const activeSessionsMap = new Map<string, {
+  journey: string[];
+  startedAt: Date;
 }>();
 
 export const handleVisitorEvent = async (data: unknown) => {
   const parsed = eventSchema.parse(data);
   const { type, page, sessionId, timestamp, country, metadata } = parsed;
 
-  const event = await prisma.visitorEvent.create({
-    data: {
-      type,
-      page,
-      sessionId,
-      timestamp: new Date(timestamp),
-      country,
-      metadata,
-    },
-  });
+//   const event = await prisma.visitorEvent.create({
+//     data: {
+//       type,
+//       page,
+//       sessionId,
+//       timestamp: new Date(timestamp),
+//       country,
+//       metadata,
+//     },
+//   });
 
   // Initialize session if not present
-  if (!activeSessions.has(sessionId)) {
-    activeSessions.set(sessionId, {
+  if (!activeSessionsMap.has(sessionId)) {
+    activeSessionsMap.set(sessionId, {
       journey: [page],
       startedAt: new Date(timestamp),
     });
@@ -37,20 +39,29 @@ export const handleVisitorEvent = async (data: unknown) => {
       },
     });
   } else {
-    const session = activeSessions.get(sessionId)!;
+    const session = activeSessionsMap.get(sessionId)!;
     if (!session.journey.includes(page)) {
       session.journey.push(page);
     }
   }
-
+  const event = await prisma.visitorEvent.create({
+    data: {
+      type,
+      page,
+      sessionId,
+      timestamp: new Date(timestamp),
+      country,
+      metadata,
+    },
+  });
   // Handle session end
   if (type === 'session_end') {
-    activeSessions.delete(sessionId);
+    activeSessionsMap.delete(sessionId);
   }
 
   // WebSocket broadcast
   WebSocketServerInstance.emitVisitorUpdate(event);
-  WebSocketServerInstance.emitSessionActivity(sessionId, activeSessions.get(sessionId));
+  WebSocketServerInstance.emitSessionActivity(sessionId, activeSessionsMap.get(sessionId));
 
   logger.info('Visitor event processed', { sessionId, type });
 

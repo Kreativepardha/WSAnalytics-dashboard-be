@@ -25,6 +25,8 @@ model VisitorEvent {
     country String
     metadata Json?
     createdAt DateTime @default(now())
+
+      session    Session   @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
   }
 
 model Session {
