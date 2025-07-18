@@ -17,6 +17,19 @@
   <p>Active Visitors: <span id="active">0</span></p>
   <p>Total Today: <span id="today">0</span></p>
 
+  <h2>🔍 Filter Events</h2>
+  <form id="filter-form">
+    <label>
+      Country:
+      <input type="text" id="filter-country" placeholder="e.g. India" />
+    </label>
+    <label>
+      Page:
+      <input type="text" id="filter-page" placeholder="e.g. /products" />
+    </label>
+    <button type="submit">Apply Filter</button>
+  </form>
+
   <h2>📈 Live Events</h2>
   <div id="events"></div>
 
@@ -59,6 +72,36 @@
       const div = document.createElement('div');
       div.innerHTML = `<strong>Session ${payload.data.sessionId}:</strong> ${payload.data.journey.join(' → ')} (${payload.data.duration}s)`;
       eventsEl.prepend(div);
+    });
+
+    const filterForm = document.getElementById('filter-form');
+    const filterCountry = document.getElementById('filter-country');
+    const filterPage = document.getElementById('filter-page');
+
+    filterForm.addEventListener('submit', function(e) {
+      e.preventDefault();
+      const filter = {};
+      if (filterCountry.value.trim()) filter.country = filterCountry.value.trim();
+      if (filterPage.value.trim()) filter.page = filterPage.value.trim();
+      socket.emit('request_detailed_stats', {
+        type: 'request_detailed_stats',
+        filter
+      });
+      // Optionally, track dashboard action
+      socket.emit('track_dashboard_action', {
+        type: 'track_dashboard_action',
+        action: 'filter_applied',
+        details: {
+          filterType: filterCountry.value ? 'country' : 'page',
+          value: filterCountry.value || filterPage.value
+        }
+      });
+    });
+
+    // Optionally, listen for a response (if server emits one)
+    socket.on('request_detailed_stats', (payload) => {
+      console.log('Filtered stats:', payload);
+      // You can update the UI here if the server sends filtered data
     });
   </script>
 </body>
