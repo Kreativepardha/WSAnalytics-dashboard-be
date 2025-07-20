@@ -1,79 +1,62 @@
-import { Server } from 'socket.io';
-import { logger } from '../utils/logger';
-
-let io: Server;
-let totalDashboards = 0;
-
 type SessionInfo = {
   journey: string[];
   startedAt: Date;
 };
-
-export const initWebSocketServer = (server: any) => {
-  io = new Server(server, {
-    cors: { origin: '*' },
-  });
-
-  io.on('connection', (socket) => {
-    totalDashboards++;
-    logger.info(`Dashboard connected: ${socket.id}`);
-    
-    io.emit('user_connected', {
-      type: 'user_connected',
-      data: {
-        totalDashboards,
-        connectedAt: new Date().toISOString(),
-      },
-    });
-
-    socket.on('disconnect', () => {
-      totalDashboards--;
-      logger.info(`Dashboard disconnected: ${socket.id}`);
-      io.emit('user_disconnected', {
-        type: 'user_disconnected',
-        data: { totalDashboards },
-      });
-    });
-
-    socket.on('request_detailed_stats', (payload) => {
-      logger.debug('Received request_detailed_stats', payload);
-      // optional: trigger a filter or stat computation
-    });
-
-    socket.on('track_dashboard_action', (payload) => {
-      logger.info('Dashboard Action', payload);
-    });
-  });
-
-  logger.info('✅ WebSocket server initialized');
+export const WebSocketServerInstance = {
+  emitVisitorUpdate: (event: any) => { /*...*/ },
+  emitSessionActivity: (sessionId: string, session: SessionInfo | undefined) => { /*...*/ }
 };
 
-export const WebSocketServerInstance = {
-  emitVisitorUpdate: (event: any) => {
-    io.emit('visitor_update', {
-      type: 'visitor_update',
-      data: {
-        event,
-        stats: {
-          // placeholder stats — update once logic is added
-          totalActive: 5,
-          totalToday: 150,
-          pagesVisited: { '/home': 45, '/products': 30 },
-        },
-      },
-    });
-  },
 
-  emitSessionActivity: (sessionId: string, session: SessionInfo | undefined) => {
-    if (!session) return;
-    io.emit('session_activity', {
-      type: 'session_activity',
-      data: {
-        sessionId,
-        currentPage: session.journey.at(-1),
-        journey: session.journey,
-        duration: Math.floor((Date.now() - new Date(session.startedAt).getTime()) / 1000),
+let totalDashboards = 0;
+const sessions = new Map<string, SessionInfo>();
+
+export const initWebSocketServer = () => {
+  Bun.serve({
+    port: 3001,
+    fetch(req, server) {
+      if (server.upgrade(req)) return;
+      return new Response("Not a WebSocket connection", { status: 400 });
+    },
+    websocket: {
+      open(ws) {
+        totalDashboards++;
+        ws.send(JSON.stringify({
+          type: 'user_connected',
+          data: {
+            totalDashboards,
+            connectedAt: new Date().toISOString(),
+          },
+        }));
+        console.log(`Dashboard connected`);
       },
-    });
-  },
+      message(ws, message) {
+        try {
+          const { type, payload } = JSON.parse(message.toString());
+
+          if (type === 'request_detailed_stats') {
+            console.log('Received request_detailed_stats', payload);
+          }
+
+          if (type === 'track_dashboard_action') {
+            console.log('Dashboard Action', payload);
+          }
+        } catch (err) {
+          console.error('Invalid message:', message);
+        }
+      },
+      close(ws) {
+        totalDashboards--;
+        ws.send(JSON.stringify({
+          type: 'user_disconnected',
+          data: {
+            totalDashboards,
+          },
+        }));
+        console.log(`Dashboard disconnected`);
+      },
+    },
+  });
+
+  console.log('✅ WebSocket server initialized at ws://localhost:3001');
 };

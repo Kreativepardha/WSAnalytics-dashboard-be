@@ -10,6 +10,7 @@ import { errorHandler } from './middlewares/errorHandler'
 import indexRouter from './routes/index'
 import { initWebSocketServer } from './websockets'
 import path from 'path';
+import { WebSocketServerInstance } from './websockets'
 
 
 const app = express()
@@ -26,7 +27,7 @@ app.use(express.static(path.join(__dirname, './public')));
 
 app.get('/', (_, res) => res.send(`Visitor Analystics API`))
 app.use('/api/v1', indexRouter)
-initWebSocketServer(httpServer);
+initWebSocketServer();
 app.use(errorHandler)
 
 httpServer.listen(ENV.PORT, () => {
