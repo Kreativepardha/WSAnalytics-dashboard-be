@@ -2,8 +2,7 @@ import { prisma } from '../config/db';
 import { logger } from '../utils/logger';
 import { eventSchema } from '../validations/events.validation';
 import { WebSocketServerInstance } from '../websockets';
-
-
+import { emitStatsUpdate } from './analytics.services';
 
 export const activeSessionsMap = new Map<string, {
   journey: string[];
@@ -13,17 +12,6 @@ export const activeSessionsMap = new Map<string, {
 export const handleVisitorEvent = async (data: unknown) => {
   const parsed = eventSchema.parse(data);
   const { type, page, sessionId, timestamp, country, metadata } = parsed;
-
-//   const event = await prisma.visitorEvent.create({
-//     data: {
-//       type,
-//       page,
-//       sessionId,
-//       timestamp: new Date(timestamp),
-//       country,
-//       metadata,
-//     },
-//   });
 
   // Initialize session if not present
   if (!activeSessionsMap.has(sessionId)) {
@@ -44,6 +32,7 @@ export const handleVisitorEvent = async (data: unknown) => {
       session.journey.push(page);
     }
   }
+  
   const event = await prisma.visitorEvent.create({
     data: {
       type,
@@ -51,9 +40,10 @@ export const handleVisitorEvent = async (data: unknown) => {
       sessionId,
       timestamp: new Date(timestamp),
       country,
-      metadata,
+      metadata: metadata as any,
     },
   });
+  
   // Handle session end
   if (type === 'session_end') {
     activeSessionsMap.delete(sessionId);
@@ -62,6 +52,9 @@ export const handleVisitorEvent = async (data: unknown) => {
   // WebSocket broadcast
   WebSocketServerInstance.emitVisitorUpdate(event);
   WebSocketServerInstance.emitSessionActivity(sessionId, activeSessionsMap.get(sessionId));
+  
+  // Emit updated stats
+  await emitStatsUpdate();
 
   logger.info('Visitor event processed', { sessionId, type });
 

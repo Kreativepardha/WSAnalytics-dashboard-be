@@ -4,36 +4,132 @@
   <meta charset="UTF-8" />
   <title>Visitor Analytics Dashboard</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; }
-    .connected { color: green; }
-    .disconnected { color: red; }
-    pre { background: #f4f4f4; padding: 10px; }
+    body { 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+      padding: 20px; 
+      background-color: #f5f5f5;
+      margin: 0;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .connected { color: #28a745; font-weight: bold; }
+    .disconnected { color: #dc3545; font-weight: bold; }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin: 20px 0;
+    }
+    .stat-card {
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+      border-left: 4px solid #007bff;
+    }
+    .stat-number {
+      font-size: 2em;
+      font-weight: bold;
+      color: #007bff;
+    }
+    .filter-section {
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+    }
+    .filter-section label {
+      display: block;
+      margin: 10px 0 5px 0;
+      font-weight: bold;
+    }
+    .filter-section input {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin-bottom: 10px;
+    }
+    .filter-section button {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .filter-section button:hover {
+      background: #0056b3;
+    }
+    .events-section {
+      margin-top: 20px;
+    }
+    .event-item {
+      background: #f8f9fa;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 6px;
+      border-left: 4px solid #28a745;
+    }
+    .event-item pre {
+      background: #e9ecef;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+      margin: 10px 0 0 0;
+    }
+    h1, h2 {
+      color: #333;
+    }
   </style>
 </head>
 <body>
-  <h1>📊 Visitor Analytics Dashboard</h1>
-  <p>Status: <span id="ws-status" class="disconnected">Disconnected</span></p>
-  <p>Connected Dashboards: <span id="dashboards">0</span></p>
-  <p>Active Visitors: <span id="active">0</span></p>
-  <p>Total Today: <span id="today">0</span></p>
+  <div class="container">
+    <h1>📊 Visitor Analytics Dashboard</h1>
+    <p>Status: <span id="ws-status" class="disconnected">Disconnected</span></p>
+    
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-number" id="dashboards">0</div>
+        <div>Connected Dashboards</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="active">0</div>
+        <div>Active Visitors</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="today">0</div>
+        <div>Total Today</div>
+      </div>
+    </div>
 
-  <h2>🔍 Filter Events</h2>
-  <form id="filter-form">
-    <label>
-      Country:
-      <input type="text" id="filter-country" placeholder="e.g. India" />
-    </label>
-    <label>
-      Page:
-      <input type="text" id="filter-page" placeholder="e.g. /products" />
-    </label>
-    <button type="submit">Apply Filter</button>
-  </form>
+    <div class="filter-section">
+      <h2>�� Filter Events</h2>
+      <form id="filter-form">
+        <label>
+          Country:
+          <input type="text" id="filter-country" placeholder="e.g. India" />
+        </label>
+        <label>
+          Page:
+          <input type="text" id="filter-page" placeholder="e.g. /products" />
+        </label>
+        <button type="submit">Apply Filter</button>
+      </form>
+    </div>
 
-  <h2>📈 Live Events</h2>
-  <div id="events"></div>
+    <div class="events-section">
+      <h2>📈 Live Events</h2>
+      <div id="events"></div>
+    </div>
+  </div>
 
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script>
     const statusEl = document.getElementById('ws-status');
     const dashboardsEl = document.getElementById('dashboards');
@@ -41,38 +137,110 @@
     const todayEl = document.getElementById('today');
     const eventsEl = document.getElementById('events');
 
-    const socket = io('http://localhost:3000');
+    let socket = null;
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
+
+    function connectWebSocket() {
+      try {
+        socket = new WebSocket('ws://localhost:3001');
+        
+        socket.onopen = function() {
+          updateStatus(true);
+          reconnectAttempts = 0;
+          console.log('WebSocket connected');
+        };
+
+        socket.onclose = function() {
+          updateStatus(false);
+          console.log('WebSocket disconnected');
+          
+          // Attempt to reconnect
+          if (reconnectAttempts < maxReconnectAttempts) {
+            reconnectAttempts++;
+            console.log(`Attempting to reconnect... (${reconnectAttempts}/${maxReconnectAttempts})`);
+            setTimeout(connectWebSocket, 2000);
+          }
+        };
+
+        socket.onerror = function(error) {
+          console.error('WebSocket error:', error);
+          updateStatus(false);
+        };
+
+        socket.onmessage = function(event) {
+          try {
+            const data = JSON.parse(event.data);
+            handleMessage(data);
+          } catch (error) {
+            console.error('Error parsing message:', error);
+          }
+        };
+      } catch (error) {
+        console.error('Error creating WebSocket:', error);
+        updateStatus(false);
+      }
+    }
 
     function updateStatus(connected) {
       statusEl.textContent = connected ? 'Connected' : 'Disconnected';
       statusEl.className = connected ? 'connected' : 'disconnected';
     }
 
-    socket.on('connect', () => updateStatus(true));
-    socket.on('disconnect', () => updateStatus(false));
+    function handleMessage(data) {
+      console.log('Received message:', data);
+      
+      switch (data.type) {
+        case 'user_connected':
+          dashboardsEl.textContent = data.data.totalDashboards;
+          break;
+          
+        case 'user_disconnected':
+          dashboardsEl.textContent = data.data.totalDashboards;
+          break;
+          
+        case 'visitor_update':
+          activeEl.textContent = data.data.stats.totalActive;
+          todayEl.textContent = data.data.stats.totalToday;
+          
+          const eventDiv = document.createElement('div');
+          eventDiv.className = 'event-item';
+          eventDiv.innerHTML = `
+            <strong>New Visitor Event</strong>
+            <pre>${JSON.stringify(data.data.event, null, 2)}</pre>
+          `;
+          eventsEl.prepend(eventDiv);
+          
+          // Keep only last 10 events
+          while (eventsEl.children.length > 10) {
+            eventsEl.removeChild(eventsEl.lastChild);
+          }
+          break;
+          
+        case 'session_activity':
+          const sessionDiv = document.createElement('div');
+          sessionDiv.className = 'event-item';
+          sessionDiv.innerHTML = `
+            <strong>Session ${data.data.sessionId}:</strong> 
+            ${data.data.journey.join(' → ')} (${data.data.duration}s)
+          `;
+          eventsEl.prepend(sessionDiv);
+          
+          // Keep only last 10 events
+          while (eventsEl.children.length > 10) {
+            eventsEl.removeChild(eventsEl.lastChild);
+          }
+          break;
+      }
+    }
 
-    socket.on('user_connected', (data) => {
-      dashboardsEl.textContent = data.data.totalDashboards;
-    });
-
-    socket.on('user_disconnected', (data) => {
-      dashboardsEl.textContent = data.data.totalDashboards;
-    });
-
-    socket.on('visitor_update', (payload) => {
-      activeEl.textContent = payload.data.stats.totalActive;
-      todayEl.textContent = payload.data.stats.totalToday;
-
-      const div = document.createElement('div');
-      div.innerHTML = `<pre>${JSON.stringify(payload.data.event, null, 2)}</pre>`;
-      eventsEl.prepend(div);
-    });
-
-    socket.on('session_activity', (payload) => {
-      const div = document.createElement('div');
-      div.innerHTML = `<strong>Session ${payload.data.sessionId}:</strong> ${payload.data.journey.join(' → ')} (${payload.data.duration}s)`;
-      eventsEl.prepend(div);
-    });
+    function sendMessage(type, payload) {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type, payload }));
+      } else {
+        console.error('WebSocket is not connected');
+      }
+    }
 
     const filterForm = document.getElementById('filter-form');
     const filterCountry = document.getElementById('filter-country');
@@ -83,13 +251,11 @@
       const filter = {};
       if (filterCountry.value.trim()) filter.country = filterCountry.value.trim();
       if (filterPage.value.trim()) filter.page = filterPage.value.trim();
-      socket.emit('request_detailed_stats', {
-        type: 'request_detailed_stats',
-        filter
-      });
-      // Optionally, track dashboard action
-      socket.emit('track_dashboard_action', {
-        type: 'track_dashboard_action',
+      
+      sendMessage('request_detailed_stats', { filter });
+      
+      // Track dashboard action
+      sendMessage('track_dashboard_action', {
         action: 'filter_applied',
         details: {
           filterType: filterCountry.value ? 'country' : 'page',
@@ -98,11 +264,8 @@
       });
     });
 
-    // Optionally, listen for a response (if server emits one)
-    socket.on('request_detailed_stats', (payload) => {
-      console.log('Filtered stats:', payload);
-      // You can update the UI here if the server sends filtered data
-    });
+    // Initialize connection
+    connectWebSocket();
   </script>
 </body>
 </html>

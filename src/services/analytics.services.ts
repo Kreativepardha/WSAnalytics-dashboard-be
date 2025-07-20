@@ -1,6 +1,7 @@
 import { prisma } from '../config/db';
 import { startOfDay } from 'date-fns';
 import { activeSessionsMap } from './events.services';
+import { WebSocketServerInstance } from '../websockets';
 
 export const getSummaryStats = async () => {
   const todayStart = startOfDay(new Date());
@@ -41,4 +42,48 @@ export const getActiveSessions = () => {
   }
 
   return sessions;
+};
+
+// Function to emit real-time stats updates
+export const emitStatsUpdate = async () => {
+  const stats = await getSummaryStats();
+  
+  // Emit stats update to all connected dashboards
+  WebSocketServerInstance.emitVisitorUpdate({
+    type: 'stats_update',
+    data: {
+      stats: {
+        totalActive: stats.totalActive,
+        totalToday: stats.totalToday
+      }
+    }
+  });
+};
+
+// Function to get filtered stats
+export const getFilteredStats = async (filter: { country?: string; page?: string }) => {
+  const todayStart = startOfDay(new Date());
+  const whereClause: any = {
+    timestamp: { gte: todayStart },
+  };
+
+  if (filter.country) {
+    whereClause.country = filter.country;
+  }
+
+  if (filter.page) {
+    whereClause.page = filter.page;
+  }
+
+  const filteredEvents = await prisma.visitorEvent.findMany({
+    where: whereClause,
+    orderBy: { timestamp: 'desc' },
+    take: 50,
+  });
+
+  return {
+    events: filteredEvents,
+    count: filteredEvents.length,
+    filter
+  };
 };
